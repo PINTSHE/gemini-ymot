@@ -16,49 +16,34 @@ const router = YemotRouter();
 
 router.post('/', async (call) => {
     try {
-        // השמעת הודעת פתיחה חיונית רק פעם אחת בכניסה
-        await call.read([{ type: 'text', data: 'שלום, הגעת לג׳מיני.' }]);
+        // קריאת הקלט שמגיע מה-ans_folder של ימות המשיח
+        const userText = call.get('val_name');
 
-        // לולאה אינסופית שתשמור אותך בתוך השלוחה ותמנע חזרה לתפריט הראשי
-        while (true) {
-            
-            // פקודת הקשבה: משמיעה צפצוף (או שקט) ומחכה שהמשתמש ידבר.
-            // הטקסט שתומלל יישמר אוטומטית בתוך המשתנה userText
-            const userText = await call.read(
-                [{ type: 'text', data: '' }], // שקט/צפצוף
-                'stt', // הפעלת מנוע זיהוי דיבור
-                { val_name: 'user_voice_input' }
-            );
-
-            // הגנה למקרה שהמשתמש שותק או שאין קלט
-            if (!userText) continue;
-
-            let history = call.session.history || "";
-
-            // שליחת המילים לג'מיני
-            const result = await model.generateContent(`
-                היסטוריה: ${history}
-                לקוח: ${userText}
-                :ענה בעברית בצורה טבעית וקצרה
-            `);
-
-            const aiResponse = result.response.text().trim();
-
-            // שמירת היסטוריית השיחה
-            call.session.history = history + `\nלקוח: ${userText}\nאתה: ${aiResponse}`;
-
-            // הקראת התשובה של ג'מיני - והלולאה תחזור אוטומטית להתחלה להקשיב לך שוב!
-            await call.read([{ type: 'text', data: aiResponse }]);
+        // אם זו כניסה ראשונית ואין עדיין קלט, פשוט נשמיע הודעה קצרה והמערכת תפעיל את ה-STT של ימות המשיח
+        if (!userText) {
+            return call.read([{ type: 'text', data: 'שלום, הגעת לג׳מיני. אנא דבר לאחר הצליל.' }]);
         }
+
+        let history = call.session.history || "";
+
+        // פנייה לג'מיני
+        const result = await model.generateContent(`
+            היסטוריה: ${history}
+            לקוח: ${userText}
+            :ענה בעברית בצורה טבעית וקצרה
+        `);
+
+        const aiResponse = result.response.text().trim();
+
+        // שמירת היסטוריה
+        call.session.history = history + `\nלקוח: ${userText}\nאתה: ${aiResponse}`;
+
+        // מקריאים את התשובה למשתמש
+        return call.read([{ type: 'text', data: aiResponse }]);
 
     } catch (e) {
-        console.error("שגיאה במערכת:", e);
-        // במקרה של שגיאה משמיעים הודעה והלולאה תנסה להקשיב שוב
-        try {
-            await call.read([{ type: 'text', data: 'סליחה, חלה שגיאה. נסה לדבר שוב.' }]);
-        } catch (err) {
-            console.error(err);
-        }
+        console.error("שגיאה:", e);
+        return call.read([{ type: 'text', data: 'סליחה, חלה שגיאה זמנית. נסה שוב.' }]);
     }
 });
 
