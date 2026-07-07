@@ -16,11 +16,17 @@ const router = YemotRouter();
 
 router.post('/', async (call) => {
     try {
-        // קריאת הטקסט שימות המשיח תמללה מהדיבור שלך
-        const userText = call.get('val_name') || call.get('input') || call.get('record_text') || "שלום";
+        // בדיקה מקיפה לקבלת הטקסט שתומלל מימות המשיח
+        const userText = call.get('val_name') || call.get('input') || call.get('record_text');
+        
+        // אם זו כניסה ראשונית לשלוחה ועדיין אין טקסט, נבקש מהמשתמש לדבר
+        if (!userText) {
+            return call.read([{ type: 'text', text: 'שלום, הגעת לג׳מיני. אנא דבר לאחר הצליל.' }]);
+        }
+
         let history = call.session.history || "";
 
-        // פנייה לג'מיני לקבלת תשובה
+        // שליחת הטקסט וההיסטוריה לג'מיני
         const result = await model.generateContent(`
             היסטוריה: ${history}
             לקוח: ${userText}
@@ -29,17 +35,17 @@ router.post('/', async (call) => {
 
         const aiResponse = result.response.text().trim();
 
-        // שמירת ההיסטוריה של השיחה
+        // עדכון היסטוריית השיחה הנוכחית
         call.session.history = history + `\nלקוח: ${userText}\nאתה: ${aiResponse}`;
 
-        // הקראת התשובה של ג'מיני למשתמש בטלפון
+        // הקראת התשובה והחזרת המשתמש לקלט הבא (מניעת חזרה לתפריט הראשי)
         call.read([{ type: 'text', text: aiResponse }]);
-        call.end();
+        call.restart();
 
     } catch (e) {
         console.error(e);
         call.read([{ type: 'text', text: 'סליחה, יש בעיה. נסה שוב.' }]);
-        call.end();
+        call.restart();
     }
 });
 
