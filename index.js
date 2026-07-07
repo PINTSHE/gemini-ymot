@@ -16,36 +16,49 @@ const router = YemotRouter();
 
 router.post('/', async (call) => {
     try {
-        // בדיקה מקיפה לקבלת הטקסט שתומלל מימות המשיח
-        const userText = call.get('val_name') || call.get('input') || call.get('record_text');
-        
-        // אם זו כניסה ראשונית לשלוחה ועדיין אין טקסט, נבקש מהמשתמש לדבר
-        if (!userText) {
-            return call.read([{ type: 'text', text: 'שלום, הגעת לג׳מיני. אנא דבר לאחר הצליל.' }]);
+        // השמעת הודעת פתיחה חיונית רק פעם אחת בכניסה
+        await call.read([{ type: 'text', data: 'שלום, הגעת לג׳מיני.' }]);
+
+        // לולאה אינסופית שתשמור אותך בתוך השלוחה ותמנע חזרה לתפריט הראשי
+        while (true) {
+            
+            // פקודת הקשבה: משמיעה צפצוף (או שקט) ומחכה שהמשתמש ידבר.
+            // הטקסט שתומלל יישמר אוטומטית בתוך המשתנה userText
+            const userText = await call.read(
+                [{ type: 'text', data: '' }], // שקט/צפצוף
+                'stt', // הפעלת מנוע זיהוי דיבור
+                { val_name: 'user_voice_input' }
+            );
+
+            // הגנה למקרה שהמשתמש שותק או שאין קלט
+            if (!userText) continue;
+
+            let history = call.session.history || "";
+
+            // שליחת המילים לג'מיני
+            const result = await model.generateContent(`
+                היסטוריה: ${history}
+                לקוח: ${userText}
+                :ענה בעברית בצורה טבעית וקצרה
+            `);
+
+            const aiResponse = result.response.text().trim();
+
+            // שמירת היסטוריית השיחה
+            call.session.history = history + `\nלקוח: ${userText}\nאתה: ${aiResponse}`;
+
+            // הקראת התשובה של ג'מיני - והלולאה תחזור אוטומטית להתחלה להקשיב לך שוב!
+            await call.read([{ type: 'text', data: aiResponse }]);
         }
 
-        let history = call.session.history || "";
-
-        // שליחת הטקסט וההיסטוריה לג'מיני
-        const result = await model.generateContent(`
-            היסטוריה: ${history}
-            לקוח: ${userText}
-            :ענה בעברית בצורה טבעית וקצרה
-        `);
-
-        const aiResponse = result.response.text().trim();
-
-        // עדכון היסטוריית השיחה הנוכחית
-        call.session.history = history + `\nלקוח: ${userText}\nאתה: ${aiResponse}`;
-
-        // הקראת התשובה והחזרת המשתמש לקלט הבא (מניעת חזרה לתפריט הראשי)
-        call.read([{ type: 'text', text: aiResponse }]);
-        call.restart();
-
     } catch (e) {
-        console.error(e);
-        call.read([{ type: 'text', text: 'סליחה, יש בעיה. נסה שוב.' }]);
-        call.restart();
+        console.error("שגיאה במערכת:", e);
+        // במקרה של שגיאה משמיעים הודעה והלולאה תנסה להקשיב שוב
+        try {
+            await call.read([{ type: 'text', data: 'סליחה, חלה שגיאה. נסה לדבר שוב.' }]);
+        } catch (err) {
+            console.error(err);
+        }
     }
 });
 
