@@ -29,12 +29,12 @@ router.post('/', async (call) => {
 
         call.session.history = history + `\nלקוח: ${userText}\nאתה: ${aiResponse}`;
 
-        call.say(aiResponse);
+        call.read([{ type: 'text', text: aiResponse }]);
         call.go_to('continue');
 
     } catch (e) {
         console.error(e);
-        call.say("סליחה, יש בעיה. נסה שוב.");
+        call.read([{ type: 'text', text: 'סליחה, יש בעיה. נסה שוב.' }]);
         call.go_to('continue');
     }
 });
