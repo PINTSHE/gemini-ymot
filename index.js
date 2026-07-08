@@ -15,37 +15,47 @@ const model = genAI.getGenerativeModel({
 
 const router = YemotRouter();
 
-// הקשבה לכל סוגי הפניות (גם GET וגם POST)
 router.all('/', async (call) => {
     try {
-        // בבקשות GET הפרמטרים מגיעים לפעמים בצורה שונה, נבדוק את כל האופציות
-        const userText = call.get('val_name') || call.query?.val_name;
+        // הודעת פתיחה ראשונית
+        await call.read([{ type: 'text', data: 'שלום, הגעת לג׳מיני. אנא דבר לאחר הצליל.' }]);
 
-        // אם המשתמש רק נכנס ואין עדיין קלט, ג'מיני פותח את השיחה מיד
-        if (!userText) {
-            return call.read([{ type: 'text', text: 'היי, מה נשמע?' }]);
+        // לולאת שיחה אינסופית
+        while (true) {
+            // הספרייה עצמה מבקשת מימות המשיח לפתוח מיקרופון ולתמלל
+            const userText = await call.read(
+                [{ type: 'text', data: '' }], // שקט לפני הצליל
+                'stt', // הפעלת מנוע תמלול קולי
+                { language: 'he-IL' } // שפת התמלול
+            );
+
+            // אם המשתמש לא דיבר או שיש שתיקה, נמשיך לחכות
+            if (!userText) continue;
+
+            let history = call.session.history || "";
+
+            // פנייה לג'מיני
+            const result = await model.generateContent(`
+                היסטוריה: ${history}
+                לקוח: ${userText}
+                :ענה בעברית בצורה טבעית וקצרה
+            `);
+
+            const aiResponse = result.response.text().trim();
+
+            // שמירת היסטוריית השיחה
+            call.session.history = history + `\nלקוח: ${userText}\nאתה: ${aiResponse}`;
+
+            // הקראת התשובה של ג'מיני - ואז הלולאה חוזרת אוטומטית להתחלה ומקשיבה שוב!
+            await call.read([{ type: 'text', data: aiResponse }]);
         }
 
-        let history = call.session.history || "";
-
-        // פנייה לג'מיני
-        const result = await model.generateContent(`
-            היסטוריה: ${history}
-            לקוח: ${userText}
-            :ענה בעברית בצורה טבעית וקצרה
-        `);
-
-        const aiResponse = result.response.text().trim();
-
-        // שמירת היסטוריית השיחה בסשן
-        call.session.history = history + `\nלקוח: ${userText}\nאתה: ${aiResponse}`;
-
-        // הקראת התשובה של ג'מיני למשתמש בטלפון
-        return call.read([{ type: 'text', text: aiResponse }]);
-
     } catch (e) {
-        console.error("שגיאה בזמן הטיפול בשיחה:", e);
-        return call.read([{ type: 'text', text: 'אופס, משהו השתבש. נסה שוב.' }]);
+        console.error("שגיאה בשיחה:", e);
+        // הגנה קטנה במקרה של ניתוק או שגיאה
+        try {
+            await call.read([{ type: 'text', data: 'חלה שגיאה, נסה שוב.' }]);
+        } catch (err) {}
     }
 });
 
