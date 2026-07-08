@@ -1,6 +1,5 @@
 require('dotenv').config();
 const express = require('express');
-const { YemotRouter } = require('yemot-router2');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
@@ -10,56 +9,50 @@ app.use(express.json());
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({
     model: "gemini-1.5-flash",
-    systemInstruction: ".אתה עוזר חביב ומקצועי שמדבר עברית טבעית"
+    systemInstruction: "אתה עוזר חביב ומקצועי שמדבר עברית טבעית."
 });
 
-const router = YemotRouter();
+// זיכרון זמני פשוט להיסטוריה (לפי מספר טלפון)
+const sessions = {};
 
-router.all('/', async (call) => {
+app.all('/', async (req, res) => {
     try {
-        // הודעת פתיחה ראשונית
-        await call.read([{ type: 'text', data: 'שלום, הגעת לג׳מיני. אנא דבר לאחר הצליל.' }]);
+        // ימות המשיח שולחת את הפרמטרים ב-query (GET) או ב-body (POST)
+        const params = { ...req.query, ...req.body };
+        const userText = params.val_name;
+        const phone = params.ApiPhone || 'default';
 
-        // לולאת שיחה אינסופית
-        while (true) {
-            // הספרייה עצמה מבקשת מימות המשיח לפתוח מיקרופון ולתמלל
-            const userText = await call.read(
-                [{ type: 'text', data: '' }], // שקט לפני הצליל
-                'stt', // הפעלת מנוע תמלול קולי
-                { language: 'he-IL' } // שפת התמלול
-            );
-
-            // אם המשתמש לא דיבר או שיש שתיקה, נמשיך לחכות
-            if (!userText) continue;
-
-            let history = call.session.history || "";
-
-            // פנייה לג'מיני
-            const result = await model.generateContent(`
-                היסטוריה: ${history}
-                לקוח: ${userText}
-                :ענה בעברית בצורה טבעית וקצרה
-            `);
-
-            const aiResponse = result.response.text().trim();
-
-            // שמירת היסטוריית השיחה
-            call.session.history = history + `\nלקוח: ${userText}\nאתה: ${aiResponse}`;
-
-            // הקראת התשובה של ג'מיני - ואז הלולאה חוזרת אוטומטית להתחלה ומקשיבה שוב!
-            await call.read([{ type: 'text', data: aiResponse }]);
+        // אם זו כניסה ראשונית ואין עדיין טקסט מתומלל
+        if (!userText) {
+            // נשמיע הודעה ונפתח מיקרופון להקלטה ותמלול
+            res.send("read=t-היי, מה נשמע? אנא דבר לאחר הצליל.=safe,stt,stt");
+            return;
         }
 
+        // ניהול היסטוריה בסיסי
+        if (!sessions[phone]) sessions[phone] = "";
+        let history = sessions[phone];
+
+        // פנייה לג'מיני
+        const result = await model.generateContent(`
+            היסטוריה: ${history}
+            לקוח: ${userText}
+            ענה בעברית בצורה טבעית וקצרה:
+        `);
+
+        const aiResponse = result.response.text().trim();
+
+        // עדכון היסטוריה
+        sessions[phone] = history + `\nלקוח: ${userText}\nאתה: ${aiResponse}`;
+
+        // מחזירים פקודה להקריא את התשובה ולפתוח שוב מיקרופון לקלט הבא
+        res.send(`read=t-${aiResponse}.=safe,stt,stt`);
+
     } catch (e) {
-        console.error("שגיאה בשיחה:", e);
-        // הגנה קטנה במקרה של ניתוק או שגיאה
-        try {
-            await call.read([{ type: 'text', data: 'חלה שגיאה, נסה שוב.' }]);
-        } catch (err) {}
+        console.error("Error:", e);
+        res.send("read=t-אופס, חלה שגיאה במערכת.=safe,stt,stt");
     }
 });
 
-app.use('/', router);
-
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log('Server running on port', PORT));
+app.listen(PORT, () => console.log('Pure Express Server running on port', PORT));
