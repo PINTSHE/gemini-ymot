@@ -1,3 +1,4 @@
+
 require('dotenv').config();
 const express = require('express');
 const { YemotRouter } = require('yemot-router2');
@@ -16,17 +17,16 @@ const router = YemotRouter();
 
 router.post('/', async (call) => {
     try {
-        // קריאת הקלט שמגיע מה-ans_folder של ימות המשיח
         const userText = call.get('val_name');
 
-        // אם זו כניסה ראשונית ואין עדיין קלט, פשוט נשמיע הודעה קצרה והמערכת תפעיל את ה-STT של ימות המשיח
+        // אם המשתמש רק נכנס, ג'מיני פותח את השיחה מיד ב-"היי"
         if (!userText) {
-            return call.read([{ type: 'text', data: 'שלום, הגעת לג׳מיני. אנא דבר לאחר הצליל.' }]);
+            return call.read([{ type: 'text', text: 'היי, מה נשמע?' }]);
         }
 
         let history = call.session.history || "";
 
-        // פנייה לג'מיני
+        // פנייה לג'מיני עם הקלט של המשתמש
         const result = await model.generateContent(`
             היסטוריה: ${history}
             לקוח: ${userText}
@@ -35,15 +35,15 @@ router.post('/', async (call) => {
 
         const aiResponse = result.response.text().trim();
 
-        // שמירת היסטוריה
+        // שמירת ההיסטוריה
         call.session.history = history + `\nלקוח: ${userText}\nאתה: ${aiResponse}`;
 
-        // מקריאים את התשובה למשתמש
-        return call.read([{ type: 'text', data: aiResponse }]);
+        // הקראת התשובה של ג'מיני
+        return call.read([{ type: 'text', text: aiResponse }]);
 
     } catch (e) {
-        console.error("שגיאה:", e);
-        return call.read([{ type: 'text', data: 'סליחה, חלה שגיאה זמנית. נסה שוב.' }]);
+        console.error("שגיאה בשרת:", e);
+        return call.read([{ type: 'text', text: 'אופס, משהו השתבש.' }]);
     }
 });
 
