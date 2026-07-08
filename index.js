@@ -15,11 +15,11 @@ const model = genAI.getGenerativeModel({
 
 const router = YemotRouter();
 
-// הקשבה לנתיב הראשי
+// הקשבה לכל סוגי הפניות (גם GET וגם POST)
 router.all('/', async (call) => {
     try {
-        // קריאת הקלט שמגיע מה-ans_folder של ימות המשיח
-        const userText = call.get('val_name');
+        // בבקשות GET הפרמטרים מגיעים לפעמים בצורה שונה, נבדוק את כל האופציות
+        const userText = call.get('val_name') || call.query?.val_name;
 
         // אם המשתמש רק נכנס ואין עדיין קלט, ג'מיני פותח את השיחה מיד
         if (!userText) {
@@ -49,9 +49,7 @@ router.all('/', async (call) => {
     }
 });
 
-// הגדרה שהשרת יקבל את הפניות גם בנתיב עם לוכסן וגם בלי
 app.use('/', router);
-app.use('', router);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log('Server running on port', PORT));
